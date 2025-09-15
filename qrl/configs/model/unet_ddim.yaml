@@ -1,0 +1,58 @@
+# UNet + DDIM 採樣器配置
+model:
+  type: "unet"
+  variant: "ddpm_cifar10"
+  pretrained: true
+  checkpoint_path: null  # 可選：自定義預訓練權重路徑
+
+# 採樣器配置
+sampler:
+  type: "ddim"  # 或 "dpmpp", "euler"
+  steps: 50
+  eta: 0.0  # DDIM eta 參數
+  guidance_scale: 5.0  # 基礎 CFG 值
+
+# 潛在變數配置
+latents:
+  height: 32
+  width: 32
+  channels: 4
+  scale_factor: 0.18215
+  dtype: "float16"
+
+# 噪聲調度配置
+noise_scheduler:
+  type: "ddpm"
+  num_train_timesteps: 1000
+  beta_start: 0.0001
+  beta_end: 0.02
+  beta_schedule: "linear"
+
+# 文本編碼器配置
+text_encoder:
+  type: "clip"
+  model_name: "openai/clip-vit-base-patch32"
+  max_length: 77
+  use_pooled: false
+
+# 優化器配置
+optimizer:
+  type: "adamw"
+  lr: 1.0e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# 學習率調度器配置
+scheduler:
+  type: "cosine"
+  warmup_steps: 1000
+  max_steps: 100000
+  min_lr_ratio: 0.1
+
+# 訓練配置
+training:
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  mixed_precision: true
+  gradient_checkpointing: false

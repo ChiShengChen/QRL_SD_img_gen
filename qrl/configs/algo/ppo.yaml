@@ -1,0 +1,51 @@
+# PPO 算法配置
+algo: ppo
+
+# 超參數
+hyperparameters:
+  gamma: 0.995  # 折扣因子
+  gae_lambda: 0.95  # GAE lambda 參數
+  clip_ratio: 0.1  # PPO clip 比例
+  entropy_coef: 0.01  # 熵正則化係數
+  value_coef: 0.5  # 價值函數係數
+  
+# 學習率配置
+learning_rates:
+  actor_lr: 1.0e-4  # Actor 學習率
+  critic_lr: 1.0e-3  # Critic 學習率
+  lr_schedule: "linear"  # 學習率調度策略
+  
+# 訓練配置
+training:
+  rollout_steps: 512  # 每次 rollouts 的步數
+  mini_batch: 8  # 小批次大小
+  update_epochs: 4  # 每次更新的 epoch 數
+  num_envs: 8  # 並行環境數量
+  
+# 緩衝區配置
+buffer:
+  size: 2048  # 緩衝區大小
+  type: "gae"  # 優勢估計類型
+  
+# 正則化配置
+regularization:
+  max_grad_norm: 0.5  # 梯度裁剪範數
+  value_clip: 0.2  # 價值函數裁剪
+  
+# 探索配置
+exploration:
+  initial_std: 1.0  # 初始動作標準差
+  min_std: 0.01  # 最小動作標準差
+  std_decay: 0.9999  # 標準差衰減率
+  
+# 早停配置
+early_stopping:
+  enabled: true
+  patience: 1000
+  min_improvement: 0.01
+  
+# 評估配置
+evaluation:
+  eval_every: 1000  # 評估頻率
+  num_eval_episodes: 10  # 評估 episode 數量
+  save_best: true  # 是否保存最佳模型

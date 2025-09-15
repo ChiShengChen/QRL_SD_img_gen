@@ -1,0 +1,50 @@
+# 基礎配置
+seed: 42
+work_dir: ./runs/${now:%Y%m%d_%H%M%S}
+device: cuda
+precision: fp16
+deterministic: false
+save_every: 1000
+log_every: 100
+eval_every: 1000
+
+# 日誌配置
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  use_tensorboard: true
+  log_freq: 10
+  handlers:
+    - type: file
+      filename: "logs/training.log"
+    - type: console
+
+# 檢查點配置
+checkpoint:
+  save_dir: "checkpoints"
+  save_every: 1000
+  save_freq: 100
+  keep_last: 5
+  save_best: true
+  metric: "terminal_reward"
+
+# 分散式訓練配置
+distributed:
+  enabled: false
+  backend: "nccl"
+  world_size: 1
+  rank: 0
+
+# 混合精度配置
+mixed_precision:
+  enabled: true
+  dtype: "fp16"
+  autocast: true
+
+# 採樣配置
+sampling:
+  num_samples: 100
+  num_steps: 50
+  batch_size: 16
+  save_images: true
+  create_grid: true

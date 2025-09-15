@@ -1,0 +1,113 @@
+# @package _global_
+
+defaults:
+  - base
+  - dataset: cifar10
+  - control: stageA_cfg
+  - algo: ppo
+  - model: unet_ddim
+
+# 訓練配置
+training:
+  num_episodes: 1000
+  eval_freq: 100
+  eval_episodes: 10
+  early_stopping:
+    enabled: true
+    patience: 200
+    min_delta: 0.01
+
+# 模型配置
+model:
+  unet_ddim:
+    model_id: "runwayml/stable-diffusion-v1-5"
+    scheduler: "DDIM"
+    num_inference_steps: 50
+    guidance_scale: 7.5
+
+# 算法配置
+algo:
+  ppo:
+    actor_type: "quantum"  # "quantum" or "classical"
+    lr_actor: 1e-4
+    lr_critic: 1e-3
+    gamma: 0.995
+    gae_lambda: 0.95
+    clip_ratio: 0.1
+    entropy_coef: 0.01
+    value_coef: 0.5
+    max_grad_norm: 0.5
+    update_epochs: 4
+    mini_batch_size: 8
+    rollout_steps: 512
+    num_envs: 8
+    mixed_precision: true
+    use_quantum_gradients: false
+
+# 控制配置
+control:
+  stageA_cfg:
+    stage: "A"
+    name: "cfg_control"
+    enabled_controls:
+      delta_cfg: true
+      attn_gating: false
+      step_scale: false
+    delta_cfg:
+      min: -2.0
+      max: 2.0
+      base_cfg: 5.0
+      clip_range: [1.0, 12.0]
+    action_space:
+      type: "continuous"
+      shape: [1]
+      low: [-2.0]
+      high: [2.0]
+    reward:
+      alpha_cls: 1.0
+      beta_step: 0.2
+      action_penalty: 0.005
+      tv_penalty: 0.0
+    state_space:
+      components:
+        - "timestep"
+        - "latent_norm"
+        - "noise_norm"
+        - "latent_noise_dot"
+        - "prev_action"
+        - "proxy_confidence"
+      normalization: true
+    environment:
+      max_steps: 50
+      early_termination: true
+      dense_reward: true
+    proxy_classifier:
+      type: "resnet18"
+      pretrained: true
+      checkpoint_path: null
+      confidence_threshold: 0.8
+
+# 數據集配置
+dataset:
+  cifar10:
+    name: "CIFAR-10"
+    data_dir: "data"
+    image_size: 32
+    num_classes: 10
+    target_class: 3
+    train_size: 45000
+    val_size: 5000
+    test_size: 10000
+    batch_size: 64
+    num_workers: 4
+    class_names:
+      - "airplane"
+      - "automobile"
+      - "bird"
+      - "cat"
+      - "deer"
+      - "dog"
+      - "frog"
+      - "horse"
+      - "ship"
+      - "truck"

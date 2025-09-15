@@ -1,0 +1,57 @@
+# CIFAR-10 資料集配置
+name: cifar10
+root: ./data/cifar10
+download: true
+num_classes: 10
+target_class: 3  # 預設目標類別：cat
+
+# 資料載入配置
+dataloader:
+  batch_size: 32
+  num_workers: 4
+  pin_memory: true
+  shuffle: true
+  drop_last: false
+
+# 資料預處理
+transforms:
+  train:
+    - type: "RandomHorizontalFlip"
+      p: 0.5
+    - type: "RandomRotation"
+      degrees: 10
+    - type: "ColorJitter"
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.1
+    - type: "ToTensor"
+    - type: "Normalize"
+      mean: [0.4914, 0.4822, 0.4465]
+      std: [0.2023, 0.1994, 0.2010]
+  
+  val:
+    - type: "ToTensor"
+    - type: "Normalize"
+      mean: [0.4914, 0.4822, 0.4465]
+      std: [0.2023, 0.1994, 0.2010]
+
+# 資料分割
+split:
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+  random_seed: 42
+
+# 類別名稱映射
+class_names:
+  0: "airplane"
+  1: "automobile"
+  2: "bird"
+  3: "cat"
+  4: "deer"
+  5: "dog"
+  6: "frog"
+  7: "horse"
+  8: "ship"
+  9: "truck"

@@ -1,0 +1,3 @@
+- training.num_episodes=2
+- algo.ppo.rollout_steps=4
+- algo.ppo.update_epochs=2

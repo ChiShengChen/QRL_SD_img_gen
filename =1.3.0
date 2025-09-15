@@ -1,0 +1,5 @@
+Requirement already satisfied: hydra-core in /home/meow/anaconda3/lib/python3.9/site-packages (1.3.2)
+Requirement already satisfied: omegaconf<2.4,>=2.2 in /home/meow/anaconda3/lib/python3.9/site-packages (from hydra-core) (2.3.0)
+Requirement already satisfied: antlr4-python3-runtime==4.9.* in /home/meow/anaconda3/lib/python3.9/site-packages (from hydra-core) (4.9.3)
+Requirement already satisfied: packaging in /home/meow/anaconda3/lib/python3.9/site-packages (from hydra-core) (23.2)
+Requirement already satisfied: PyYAML>=5.1.0 in /home/meow/anaconda3/lib/python3.9/site-packages (from omegaconf<2.4,>=2.2->hydra-core) (6.0.1)

@@ -1,0 +1,67 @@
+# Stage A: CFG 增量控制配置
+stage: "A"
+name: "cfg_control"
+
+# 控制參數啟用狀態
+enabled_controls:
+  delta_cfg: true      # CFG 增量控制
+  attn_gating: false   # 注意力門控控制（Stage B）
+  step_scale: false    # 步長因子控制（Stage C）
+
+# CFG 增量控制配置
+delta_cfg:
+  min: -2.0  # 最小 CFG 增量
+  max: 2.0   # 最大 CFG 增量
+  base_cfg: 5.0  # 基礎 CFG 值
+  clip_range: [1.0, 12.0]  # CFG 裁剪範圍
+  
+# 動作空間配置
+action_space:
+  type: "continuous"
+  shape: [1]  # 單一連續值
+  low: [-2.0]
+  high: [2.0]
+  
+# 獎勵配置
+reward:
+  alpha_cls: 1.0      # 分類器置信度獎勵係數
+  beta_step: 0.2      # 步間獎勵係數
+  action_penalty: 0.005  # 動作正則化係數
+  tv_penalty: 0.0     # 總變分正則化係數（可選）
+  
+# 狀態空間配置
+state_space:
+  components:
+    - "timestep"           # 當前步數 / 總步數
+    - "latent_norm"        # 潛在變數 L2 範數
+    - "noise_norm"         # 預測噪聲 L2 範數
+    - "latent_noise_dot"  # 潛在變數與噪聲的點積
+    - "prev_action"        # 上一步動作
+    - "proxy_confidence"   # 代理分類器置信度
+  normalization: true      # 是否標準化狀態
+  
+# 環境配置
+environment:
+  max_steps: 50           # 最大步數
+  early_termination: true # 是否允許提前終止
+  dense_reward: true      # 是否使用密集獎勵
+  
+# 代理分類器配置
+proxy_classifier:
+  type: "resnet18"
+  pretrained: true
+  checkpoint_path: null   # 可選：自定義權重路徑
+  confidence_threshold: 0.8  # 置信度閾值
+  
+# 後續階段預留配置
+future_stages:
+  stage_b:
+    attn_gating:
+      min: 0.0
+      max: 1.0
+      enabled: false
+  stage_c:
+    step_scale:
+      min: 0.5
+      max: 2.0
+      enabled: false

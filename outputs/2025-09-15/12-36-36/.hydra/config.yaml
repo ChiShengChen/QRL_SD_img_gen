@@ -1,0 +1,322 @@
+seed: 42
+work_dir: ./runs/${now:%Y%m%d_%H%M%S}
+device: cuda
+precision: fp16
+save_every: 1000
+log_every: 100
+eval_every: 1000
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  handlers:
+  - type: file
+    filename: logs/training.log
+  - type: console
+checkpoint:
+  save_dir: checkpoints
+  save_every: 1000
+  keep_last: 5
+  save_best: true
+  metric: terminal_reward
+distributed:
+  enabled: false
+  backend: nccl
+  world_size: 1
+  rank: 0
+mixed_precision:
+  enabled: true
+  dtype: fp16
+  autocast: true
+dataset:
+  name: cifar10
+  root: ./data/cifar10
+  download: true
+  num_classes: 10
+  target_class: 3
+  dataloader:
+    batch_size: 32
+    num_workers: 4
+    pin_memory: true
+    shuffle: true
+    drop_last: false
+  transforms:
+    train:
+    - type: RandomHorizontalFlip
+      p: 0.5
+    - type: RandomRotation
+      degrees: 10
+    - type: ColorJitter
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.1
+    - type: ToTensor
+    - type: Normalize
+      mean:
+      - 0.4914
+      - 0.4822
+      - 0.4465
+      std:
+      - 0.2023
+      - 0.1994
+      - 0.201
+    val:
+    - type: ToTensor
+    - type: Normalize
+      mean:
+      - 0.4914
+      - 0.4822
+      - 0.4465
+      std:
+      - 0.2023
+      - 0.1994
+      - 0.201
+  split:
+    train_ratio: 0.8
+    val_ratio: 0.1
+    test_ratio: 0.1
+    random_seed: 42
+  class_names:
+    0: airplane
+    1: automobile
+    2: bird
+    3: cat
+    4: deer
+    5: dog
+    6: frog
+    7: horse
+    8: ship
+    9: truck
+  cifar10:
+    name: CIFAR-10
+    data_dir: data
+    image_size: 32
+    num_classes: 10
+    target_class: 3
+    train_size: 45000
+    val_size: 5000
+    test_size: 10000
+    batch_size: 64
+    num_workers: 4
+    class_names:
+    - airplane
+    - automobile
+    - bird
+    - cat
+    - deer
+    - dog
+    - frog
+    - horse
+    - ship
+    - truck
+control:
+  stage: A
+  name: cfg_control
+  enabled_controls:
+    delta_cfg: true
+    attn_gating: false
+    step_scale: false
+  delta_cfg:
+    min: -2.0
+    max: 2.0
+    base_cfg: 5.0
+    clip_range:
+    - 1.0
+    - 12.0
+  action_space:
+    type: continuous
+    shape:
+    - 1
+    low:
+    - -2.0
+    high:
+    - 2.0
+  reward:
+    alpha_cls: 1.0
+    beta_step: 0.2
+    action_penalty: 0.005
+    tv_penalty: 0.0
+  state_space:
+    components:
+    - timestep
+    - latent_norm
+    - noise_norm
+    - latent_noise_dot
+    - prev_action
+    - proxy_confidence
+    normalization: true
+  environment:
+    max_steps: 50
+    early_termination: true
+    dense_reward: true
+  proxy_classifier:
+    type: resnet18
+    pretrained: true
+    checkpoint_path: null
+    confidence_threshold: 0.8
+  future_stages:
+    stage_b:
+      attn_gating:
+        min: 0.0
+        max: 1.0
+        enabled: false
+    stage_c:
+      step_scale:
+        min: 0.5
+        max: 2.0
+        enabled: false
+  stageA_cfg:
+    stage: A
+    name: cfg_control
+    enabled_controls:
+      delta_cfg: true
+      attn_gating: false
+      step_scale: false
+    delta_cfg:
+      min: -2.0
+      max: 2.0
+      base_cfg: 5.0
+      clip_range:
+      - 1.0
+      - 12.0
+    action_space:
+      type: continuous
+      shape:
+      - 1
+      low:
+      - -2.0
+      high:
+      - 2.0
+    reward:
+      alpha_cls: 1.0
+      beta_step: 0.2
+      action_penalty: 0.005
+      tv_penalty: 0.0
+    state_space:
+      components:
+      - timestep
+      - latent_norm
+      - noise_norm
+      - latent_noise_dot
+      - prev_action
+      - proxy_confidence
+      normalization: true
+    environment:
+      max_steps: 50
+      early_termination: true
+      dense_reward: true
+    proxy_classifier:
+      type: resnet18
+      pretrained: true
+      checkpoint_path: null
+      confidence_threshold: 0.8
+algo:
+  algo: ppo
+  hyperparameters:
+    gamma: 0.995
+    gae_lambda: 0.95
+    clip_ratio: 0.1
+    entropy_coef: 0.01
+    value_coef: 0.5
+  learning_rates:
+    actor_lr: 0.0001
+    critic_lr: 0.001
+    lr_schedule: linear
+  training:
+    rollout_steps: 512
+    mini_batch: 8
+    update_epochs: 4
+    num_envs: 8
+  buffer:
+    size: 2048
+    type: gae
+  regularization:
+    max_grad_norm: 0.5
+    value_clip: 0.2
+  exploration:
+    initial_std: 1.0
+    min_std: 0.01
+    std_decay: 0.9999
+  early_stopping:
+    enabled: true
+    patience: 1000
+    min_improvement: 0.01
+  evaluation:
+    eval_every: 1000
+    num_eval_episodes: 10
+    save_best: true
+  ppo:
+    actor_type: quantum
+    lr_actor: 0.0001
+    lr_critic: 0.001
+    gamma: 0.995
+    gae_lambda: 0.95
+    clip_ratio: 0.1
+    entropy_coef: 0.01
+    value_coef: 0.5
+    max_grad_norm: 0.5
+    update_epochs: 4
+    mini_batch_size: 8
+    rollout_steps: 4
+    num_envs: 8
+    mixed_precision: true
+    use_quantum_gradients: false
+model:
+  model:
+    type: unet
+    variant: ddpm_cifar10
+    pretrained: true
+    checkpoint_path: null
+  sampler:
+    type: ddim
+    steps: 50
+    eta: 0.0
+    guidance_scale: 5.0
+  latents:
+    height: 32
+    width: 32
+    channels: 4
+    scale_factor: 0.18215
+    dtype: float16
+  noise_scheduler:
+    type: ddpm
+    num_train_timesteps: 1000
+    beta_start: 0.0001
+    beta_end: 0.02
+    beta_schedule: linear
+  text_encoder:
+    type: clip
+    model_name: openai/clip-vit-base-patch32
+    max_length: 77
+    use_pooled: false
+  optimizer:
+    type: adamw
+    lr: 0.0001
+    weight_decay: 0.01
+    betas:
+    - 0.9
+    - 0.999
+    eps: 1.0e-08
+  scheduler:
+    type: cosine
+    warmup_steps: 1000
+    max_steps: 100000
+    min_lr_ratio: 0.1
+  training:
+    gradient_accumulation_steps: 1
+    max_grad_norm: 1.0
+    mixed_precision: true
+    gradient_checkpointing: false
+  unet_ddim:
+    model_id: runwayml/stable-diffusion-v1-5
+    scheduler: DDIM
+    num_inference_steps: 50
+    guidance_scale: 7.5
+training:
+  num_episodes: 2
+  eval_freq: 100
+  eval_episodes: 10
+  early_stopping:
+    enabled: true
+    patience: 200
+    min_delta: 0.01
