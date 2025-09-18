@@ -1,0 +1,68 @@
+# 量子 Actor 配置
+# @package _global_
+
+defaults:
+  - _self_
+  - base
+  - dataset: cifar10
+  - control: stageA_cfg
+  - algo: ppo
+  - model: unet_ddim
+
+# 算法配置
+algo:
+  ppo:
+    actor_type: "quantum"  # 使用量子 Actor
+    lr_actor: 1e-4
+    lr_critic: 1e-3
+    gamma: 0.995
+    gae_lambda: 0.95
+    clip_ratio: 0.1
+    entropy_coef: 0.01
+    value_coef: 0.5
+    max_grad_norm: 0.5
+    update_epochs: 4
+    mini_batch_size: 8
+    rollout_steps: 512
+    num_envs: 8
+    mixed_precision: true
+    use_quantum_gradients: false
+
+# 量子 Actor 特定配置
+quantum_actor:
+  n_qubits: 8
+  n_layers: 4
+  backend: "default.qubit"
+  shots: null
+  post_process_dims: [64, 32]
+
+# 訓練配置
+training:
+  num_episodes: 1000
+  eval_freq: 100
+  eval_episodes: 10
+  early_stopping:
+    enabled: true
+    patience: 200
+    min_delta: 0.01
+  save_freq: 100
+  log_freq: 10
+
+# 評估配置
+evaluation:
+  num_samples: 100
+  num_classes: 10
+  metrics:
+    - classification_accuracy
+    - fid_score
+    - inception_score
+    - lpips
+    - parameter_efficiency
+    - convergence_speed
+
+# 輸出配置
+output:
+  model_name: "quantum_actor"
+  save_dir: "runs/quantum_comparison"
+  log_dir: "logs/quantum_comparison"
+  metrics_dir: "metrics/quantum_comparison"

@@ -1,0 +1,24 @@
+# Stage A CFG 控制配置
+# @package control
+
+stage: "A"
+enabled_controls:
+  delta_cfg: true
+  attention_weights: false
+  step_size: false
+
+# CFG 控制參數
+delta_cfg:
+  min: -2.0
+  max: 2.0
+  base_cfg: 5.0
+
+# 環境配置
+environment:
+  max_steps: 50
+  reward_config:
+    alpha_cls: 1.0
+    beta_step: 0.2
+    action_penalty: 0.005
+    tv_penalty: 0.0
+

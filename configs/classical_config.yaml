@@ -1,0 +1,66 @@
+# 經典 Actor 配置
+# @package _global_
+
+defaults:
+  - _self_
+  - base
+  - dataset: cifar10
+  - control: stageA_cfg
+  - algo: ppo
+  - model: unet_ddim
+
+# 算法配置
+algo:
+  ppo:
+    actor_type: "classical"  # 使用經典 Actor
+    lr_actor: 1e-4
+    lr_critic: 1e-3
+    gamma: 0.995
+    gae_lambda: 0.95
+    clip_ratio: 0.1
+    entropy_coef: 0.01
+    value_coef: 0.5
+    max_grad_norm: 0.5
+    update_epochs: 4
+    mini_batch_size: 8
+    rollout_steps: 512
+    num_envs: 8
+    mixed_precision: true
+    use_quantum_gradients: false
+
+# 經典 Actor 特定配置
+classical_actor:
+  hidden_dims: [128, 64]
+  dropout: 0.1
+  activation: "relu"
+
+# 訓練配置
+training:
+  num_episodes: 1000
+  eval_freq: 100
+  eval_episodes: 10
+  early_stopping:
+    enabled: true
+    patience: 200
+    min_delta: 0.01
+  save_freq: 100
+  log_freq: 10
+
+# 評估配置
+evaluation:
+  num_samples: 100
+  num_classes: 10
+  metrics:
+    - classification_accuracy
+    - fid_score
+    - inception_score
+    - lpips
+    - parameter_efficiency
+    - convergence_speed
+
+# 輸出配置
+output:
+  model_name: "classical_actor"
+  save_dir: "runs/classical_comparison"
+  log_dir: "logs/classical_comparison"
+  metrics_dir: "metrics/classical_comparison"

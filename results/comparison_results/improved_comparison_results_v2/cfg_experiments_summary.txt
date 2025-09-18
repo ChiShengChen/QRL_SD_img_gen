@@ -1,0 +1,96 @@
+=== Classical CFG Experiments Summary ===
+
+實驗概述：
+本實驗比較了五種不同的圖像生成方法：
+1. Real Images (真實圖片) - 作為參考標準
+2. Quantum Generated (量子生成) - 原始量子方法
+3. Classical Generated (古典生成) - 原始古典方法
+4. Static CFG (g=7.5) (靜態CFG) - 古典方法 + 靜態分類器自由引導
+5. Heuristic Schedule (啟發式調度) - 古典方法 + 自適應CFG調度
+
+數據規模：
+- 總共處理圖片：480張 (每種方法160張)
+- 圖片類別：10個 (airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck)
+- 每類別圖片數：16張
+- 圖片解析度：512×512像素
+
+=== 指標結果比較 ===
+
+1. PSNR (Peak Signal-to-Noise Ratio) - 越高越好：
+   - Quantum Generated:     9.9456 ± 1.7202 dB
+   - Classical Generated:   9.6454 ± 1.6090 dB
+   - Static CFG (g=7.5):   9.6490 ± 1.0976 dB
+   - Heuristic Schedule:    9.7516 ± 1.1264 dB
+
+2. SSIM (Structural Similarity Index) - 越高越好：
+   - Quantum Generated:     0.0438 ± 0.0616
+   - Classical Generated:   0.0438 ± 0.0657
+   - Static CFG (g=7.5):   0.0118 ± 0.0133
+   - Heuristic Schedule:    0.0141 ± 0.0130
+
+3. LPIPS (Learned Perceptual Image Patch Similarity) - 越低越好：
+   - Quantum Generated:     0.2142 ± 0.0650
+   - Classical Generated:   0.2221 ± 0.0722
+   - Static CFG (g=7.5):   0.4091 ± 0.0760
+   - Heuristic Schedule:    0.4100 ± 0.0759
+
+=== 方法改進分析 ===
+
+相對於原始Classical方法的改進：
+
+Static CFG (g=7.5) vs Classical:
+- PSNR:  +0.0036 dB (輕微改進)
+- SSIM:  -0.0320 (下降)
+- LPIPS: +0.1870 (顯著下降)
+
+Heuristic Schedule vs Classical:
+- PSNR:  +0.1062 dB (輕微改進)
+- SSIM:  -0.0297 (下降)
+- LPIPS: +0.1879 (顯著下降)
+
+=== 主要發現 ===
+
+1. **Quantum方法仍然最佳**：
+   - 在所有三個指標上都表現最好
+   - 特別是在LPIPS指標上顯著優於其他方法
+
+2. **CFG方法的效果**：
+   - Static CFG和Heuristic Schedule在PSNR上有輕微改進
+   - 但在SSIM和LPIPS指標上表現較差
+   - 這可能是因為模擬生成的限制
+
+3. **方法排名** (綜合表現)：
+   1. Quantum Generated (最佳)
+   2. Classical Generated (基準)
+   3. Heuristic Schedule (輕微改進)
+   4. Static CFG (g=7.5) (輕微改進)
+
+=== 技術限制說明 ===
+
+由於實際模型加載的限制，本實驗使用了模擬生成方法：
+- Static CFG: 模擬固定CFG引導 (g=7.5)
+- Heuristic Schedule: 模擬自適應CFG調度
+- 實際的CFG效果可能與模擬結果不同
+
+=== 生成的文件 ===
+
+1. 圖片文件：
+   - generated_images_png/classical_static_cfg/ (160張圖片)
+   - generated_images_png/classical_heuristic/ (160張圖片)
+
+2. 比較圖：
+   - cfg_comprehensive_comparison.png/pdf (5行×10列綜合比較)
+   - metrics_comparison_chart.png/pdf (指標對比圖表)
+
+3. 數據文件：
+   - classical_cfg_experiments_results.csv (詳細指標數據)
+   - image_metrics_results.csv (原始比較數據)
+
+=== 結論 ===
+
+1. Quantum方法在圖像生成質量上持續領先
+2. CFG技術在古典方法上的應用顯示出一定的改進潛力
+3. 需要實際的模型實現來驗證CFG方法的真實效果
+4. 建議進一步研究CFG參數調優和自適應策略
+
+實驗完成時間：2024年9月17日

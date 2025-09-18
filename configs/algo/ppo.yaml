@@ -1,0 +1,28 @@
+# PPO 算法配置
+# @package algo
+
+name: "ppo"
+type: "on_policy"
+
+# 學習率
+lr_actor: 1e-4
+lr_critic: 1e-3
+
+# PPO 超參數
+gamma: 0.995
+gae_lambda: 0.95
+clip_ratio: 0.1
+entropy_coef: 0.01
+value_coef: 0.5
+max_grad_norm: 0.5
+
+# 訓練配置
+update_epochs: 4
+mini_batch_size: 8
+rollout_steps: 512
+num_envs: 8
+
+# 其他配置
+mixed_precision: true
+use_quantum_gradients: false
+
