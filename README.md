@@ -2,9 +2,9 @@
 
 Official implementation of
 
-**[Quantum Reinforcement Learning-Guided Diffusion Model for Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures](https://ieeexplore.ieee.org/abstract/document/11461991/)**
+**Quantum Reinforcement Learning-Guided Diffusion Model for Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures**
 Chi-Sheng Chen, En-Jui Kuo
-*IEEE ICASSP 2026 (oral)* · [arXiv:2509.14163](https://arxiv.org/abs/2509.14163)
+*[IEEE ICASSP 2026 (oral)](https://ieeexplore.ieee.org/abstract/document/11461991/)* · [arXiv:2509.14163](https://arxiv.org/abs/2509.14163)
 
 [![arXiv](https://img.shields.io/badge/arXiv-2509.14163-b31b1b.svg)](https://arxiv.org/abs/2509.14163)
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/)
