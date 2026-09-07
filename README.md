@@ -1,484 +1,262 @@
-# 🧩 QRL Image Synthesis
+# QRL-Guided Diffusion: Quantum Reinforcement Learning for Dynamic Classifier-Free Guidance
 
-**Quantum Reinforcement Learning-Guided Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures**
+Official implementation of
 
+**Quantum Reinforcement Learning-Guided Diffusion Model for Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures**
+Chi-Sheng Chen, En-Jui Kuo
+*IEEE ICASSP 2026 (oral)* · [arXiv:2509.14163](https://arxiv.org/abs/2509.14163)
+
+[![arXiv](https://img.shields.io/badge/arXiv-2509.14163-b31b1b.svg)](https://arxiv.org/abs/2509.14163)
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![PennyLane](https://img.shields.io/badge/PennyLane-0.36+-purple.svg)](https://pennylane.ai/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## 🎯 核心創新
+<p align="center"><img src="assets/teaser.png" width="800" alt="Real vs. quantum-guided vs. classical-guided samples across the ten CIFAR-10 classes"></p>
+<p align="center"><em>Real CIFAR-10 images (top), samples guided by the QRL actor (middle), and by the classical MLP actor (bottom). Generated images are shown upsampled for display.</em></p>
 
-本專案實現了**首個量子強化學習引導的擴散模型**，通過量子策略網路動態控制CFG（Classifier-Free Guidance）參數，實現更智能、更高效的圖像生成。
+## Overview
 
-### 🔬 關鍵創新點
+Diffusion models usually run classifier-free guidance (CFG) with a fixed or hand-designed schedule that ignores the state of the sample at each denoising step. This repo treats **guidance scheduling as a sequential decision problem**: a hybrid quantum–classical policy observes the current denoising state and outputs a per-step guidance adjustment ΔCFG, trained with PPO.
 
-#### **量子優勢**：
-- **量子電路**: 4 qubits, 2 layers, 32個參數
-- **經典後處理**: 2466個參數  
-- **總參數**: 2498個 (比經典模型少)
+- **Actor**: a shallow variational quantum circuit (VQC) produces policy features, followed by a compact MLP head that outputs a Gaussian policy over ΔCFG.
+- **Critic**: a classical MLP value network.
+- **Environment**: a pretrained diffusion sampler (DDIM) wrapped as a Gymnasium-style env; one episode = one full denoising trajectory.
+- **Reward**: classifier confidence on the generated image, per-step confidence gain, and an action-regularization penalty.
 
-#### **強化學習控制**：
-- **狀態空間**: 6維 (潛在變數統計 + 時間信息)
-- **動作空間**: 1維 (CFG值)
-- **獎勵函數**: 分類準確性 + 生成質量
+On CIFAR-10 the quantum actor improves PSNR and LPIPS and matches SSIM against a classical MLP actor while using roughly a quarter of the parameters (2,498 vs. 9,282).
 
-#### **多類別泛化**：
-- **訓練**: 固定target_class=3 (cat)
-- **推理**: 動態target_class (0-9)
-- **文本提示**: 自動生成對應類別描述
+## Method at a glance
 
-## 🔄 完整數據流圖
+| Component | Setting (paper) |
+|---|---|
+| Quantum circuit | 4 qubits, depth 2, RY–RZ angle encoding, per-layer `Rot` + ring CNOT entanglement + `RX`, Pauli-Z readout (PennyLane) |
+| Actor parameters | 32 (VQC) + 2,466 (MLP head, 4→64→32→2) = **2,498** |
+| Classical baseline actor | MLP 6→128→64→2, **9,282** parameters (≈9.3K) |
+| State `s_t` (6-dim) | `[t/T, ‖z_t‖₂, ‖ε_t‖₂, ⟨z_t, ε_t⟩, a_{t-1}, p_proxy(y | x_t)]` |
+| Action `a_t` | scalar ΔCFG, clipped to [−2, +2] |
+| Effective guidance | `g_t = clip(CFG_0 + a_t, 1, 12)`, `CFG_0 = 5.0` |
+| Backbone | Stable Diffusion v1.5 (`runwayml/stable-diffusion-v1-5`): latent UNet + CLIP text encoder + VAE, frozen |
+| Sampler | DDIM, 50 steps |
+| Proxy classifier | ResNet-18 on CIFAR-10 |
+| RL algorithm | PPO + GAE (`γ = 0.995`, `λ = 0.95`, clip 0.1, entropy 0.01, value coef 0.5) |
+| PPO schedule | 8 parallel envs, rollout 512, 4 epochs, minibatch 8, lr 1e-4 (actor) / 1e-3 (critic) |
+| Reward | `α · log p(y | x_0)` (terminal, α = 1.0) + `β · (conf_t − conf_{t−1})` (per step, β = 0.2) − `λ_act · a_t²` (λ_act = 5e-3) + optional TV term (λ_tv = 0) |
+| Dataset | CIFAR-10, 10 classes; trained on class 3 (cat), evaluated on all 10 classes |
 
-### **核心數據流**：
-
-```
-文本提示: "a photo of a cat"
-    ↓
-CLIP編碼器: 文本 → 文本嵌入 [77, 768]
-    ↓
-環境狀態: [潛在變數統計, 時間步, 置信度] [6]
-    ↓
-量子Actor: 狀態 → 量子電路 → 經典後處理 → CFG值 [1]
-    ↓
-CFG控制: 調整文本條件強度
-    ↓
-UNet: (潛在變數, 時間步, 文本嵌入) → 噪聲預測
-    ↓
-CFG計算: uncond + cfg*(cond - uncond)
-    ↓
-去噪: 潛在變數更新
-    ↓
-重複N步 → 最終潛在變數
-    ↓
-VAE解碼: 潛在變數 → 圖像 [3, 64, 64]
-    ↓
-獎勵計算: 分類器 + 置信度
-    ↓
-PPO更新: 策略梯度 + 價值函數
-```
-
-### **詳細架構圖**：
+Per-step loop:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            QRL Image Synthesis Pipeline                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│  │   Text      │    │   CLIP      │    │   Quantum   │    │   CFG       │  │
-│  │  Prompt     │───►│  Encoder    │───►│   Actor     │───►│  Control    │  │
-│  │"a cat"      │    │[77, 768]    │    │[6→1]        │    │[1.0-7.0]   │  │
-│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
-│                                                              │              │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐      │              │
-│  │   Random    │    │   UNet      │    │   CFG       │      │              │
-│  │   Noise     │───►│  Denoiser   │◄───│  Guidance   │◄─────┘              │
-│  │[3,64,64]    │    │[50 steps]   │    │  Compute    │                     │
-│  └─────────────┘    └─────────────┘    └─────────────┘                     │
-│                              │                                            │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                     │
-│  │   VAE       │    │   Classifier│    │   Reward    │                     │
-│  │  Decoder    │◄───│  Confidence │───►│  Function   │                     │
-│  │[3,64,64]    │    │[0.0-1.0]    │    │[PPO Signal] │                     │
-│  └─────────────┘    └─────────────┘    └─────────────┘                     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+s_t  ──► VQC (4q, depth 2) ──► MLP head ──► (μ, log σ) ──► a_t ~ N(μ, σ²)
+g_t = clip(CFG_0 + a_t, 1, 12)
+ε̂   = ε_uncond + g_t · (ε_cond − ε_uncond)
+z_{t-1} = DDIM_step(z_t, ε̂)
+r_t  = β · (conf_t − conf_{t−1}) − λ_act · a_t²        (+ α · log p(y | x_0) at t = 0)
 ```
 
-### **量子電路詳細結構**：
+Quantum actor circuit (one of the two variational layers shown):
 
 ```
-量子Actor架構 (4 qubits, 2 layers):
-┌─────────────────────────────────────────────────────────────┐
-│                    Quantum Circuit                          │
-├─────────────────────────────────────────────────────────────┤
-│  Input State [6] → Feature Map → Quantum Layers → Measure   │
-│                                                             │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │   Q0    │  │   Q1    │  │   Q2    │  │   Q3    │        │
-│  │  RY(θ₁) │  │  RY(θ₂) │  │  RY(θ₃) │  │  RY(θ₄) │        │
-│  │  RZ(φ₁) │  │  RZ(φ₂) │  │  RZ(φ₃) │  │  RZ(φ₄) │        │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘        │
-│       │            │            │            │             │
-│       └────────────┼────────────┼────────────┘             │
-│                    │            │                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │   Q0    │  │   Q1    │  │   Q2    │  │   Q3    │        │
-│  │  RY(θ₅) │  │  RY(θ₆) │  │  RY(θ₇) │  │  RY(θ₈) │        │
-│  │  RZ(φ₅) │  │  RZ(φ₆) │  │  RZ(φ₇) │  │  RZ(φ₈) │        │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘        │
-│       │            │            │            │             │
-│       └────────────┼────────────┼────────────┘             │
-│                    │            │                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │   Q0    │  │   Q1    │  │   Q2    │  │   Q3    │        │
-│  │  RY(θ₉) │  │  RY(θ₁₀)│  │  RY(θ₁₁)│  │  RY(θ₁₂)│        │
-│  │  RZ(φ₉) │  │  RZ(φ₁₀)│  │  RZ(φ₁₁)│  │  RZ(φ₁₂)│        │
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘        │
-│       │            │            │            │             │
-│       └────────────┼────────────┼────────────┘             │
-│                    │            │                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │   Q0    │  │   Q1    │  │   Q2    │  │   Q3    │        │
-│  │  RY(θ₁₃)│  │  RY(θ₁₄)│  │  RY(θ₁₅)│  │  RY(θ₁₆)│        │
-│  │  RZ(φ₁₃)│  │  RZ(φ₁₄)│  │  RZ(φ₁₅)│  │  RZ(φ₁₆)│        │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘        │
-│                                                             │
-│  Quantum Output [4] → MLP Head [4→1] → CFG Value [1]      │
-└─────────────────────────────────────────────────────────────┘
+q0: RY(s₀) RZ(s₀) ─ Rot(θ) ─●───────────X─ RX(θ) ─ … ─ ⟨Z⟩
+q1: RY(s₁) RZ(s₁) ─ Rot(θ) ─X─●─────────┼─ RX(θ) ─ … ─ ⟨Z⟩
+q2: RY(s₂) RZ(s₂) ─ Rot(θ) ───X─●───────┼─ RX(θ) ─ … ─ ⟨Z⟩
+q3: RY(s₃) RZ(s₃) ─ Rot(θ) ─────X───────●─ RX(θ) ─ … ─ ⟨Z⟩
+                              ring CNOT (i → i+1 mod 4)
+⟨Z⟩ × 4 ──► MLP [4 → 64 → 32 → 2] ──► (μ, log σ)
 ```
 
+> The `QuantumActor` class defaults to 8 qubits / 4 layers. The paper experiments use `n_qubits=4, n_layers=2`, set in [scripts/experiments/run_improved_comparison_v2.py](scripts/experiments/run_improved_comparison_v2.py).
 
-## ⚡ 快速開始
+## Installation
 
-### 1. 一鍵快速開始（推薦）
 ```bash
-# 自動完成：依賴檢查 + 快速訓練 + 生成圖像
+git clone https://github.com/ChiShengChen/QRL_SD_img_gen.git
+cd QRL_SD_img_gen
+
+make env                      # creates the conda env from environment.yml
+conda activate qrl_image_synthesis
+# or: pip install -e .
+
+make data                     # downloads CIFAR-10 (scripts/download_cifar10.py)
+python quick_start.py --test-only   # sanity-check dependencies (torch, pennylane, gymnasium, ...)
+```
+
+Stable Diffusion v1.5 weights are pulled from the Hugging Face Hub automatically on first use. A CUDA GPU is required for training; a `Dockerfile` (CUDA 12.1) is also provided.
+
+## Quick start
+
+One command to check dependencies, run a short training, and generate a few images:
+
+```bash
 python quick_start.py
-
-# 只測試依賴
-python quick_start.py --test-only
-
-# 自定義參數
+python quick_start.py --test-only                          # dependencies only
 python quick_start.py --episodes 5 --num-images 10 --target-class 5
 ```
 
-### 2. 手動步驟（2分鐘）
-```bash
-# 測試依賴
-python test_imports.py
+## Training
 
-# 快速訓練（2個episodes）
-python scripts/train_qrl.py --config-path ../qrl/configs --config-name main training.num_episodes=2 algo.ppo.rollout_steps=4
+Smoke test (~2 episodes):
 
-# 生成圖像
-python generate_images.py --checkpoint runs/*/ckpt_best.pt --num-images 5 --target-class 3
-```
-
-### 3. 完整訓練（30分鐘+）
-```bash
-# 完整訓練（1000個episodes）
-python scripts/train_qrl.py --config-path ../qrl/configs --config-name main training.num_episodes=1000
-
-# 生成更多圖像
-python generate_images.py --checkpoint runs/*/ckpt_best.pt --num-images 20 --target-class 3 --output-dir my_images
-```
-
-### 4. 自定義訓練
-```bash
-# 自定義參數
-python scripts/train_qrl.py --config-path ../qrl/configs --config-name main \
-    training.num_episodes=500 \
-    algo.ppo.rollout_steps=32 \
-    algo.ppo.lr_actor=0.0003 \
-    algo.ppo.lr_critic=0.001 \
-    dataset.cifar10.target_class=5
-```
-
-### 5. 查看結果
-```bash
-# 查看生成的圖像
-ls generated_images/
-ls my_images/
-
-# 查看訓練日誌
-ls runs/*/logs/
-```
-
-> 📖 **詳細指南**: 查看 [QUICK_START.md](QUICK_START.md) 獲取完整的訓練和生成指令說明
-
-## 📖 專案簡介
-
-本專案實現了一個**量子-經典混合**的強化學習框架，用於優化擴散模型的採樣過程。通過訓練**量子策略網路（Actor）**來動態控制擴散採樣中的關鍵參數，實現更智能、更高效的圖像生成。
-
-### 🎯 核心目標
-
-1. **第一階段（Stage A）**：使用 PPO 訓練量子 Actor 控制 **CFG 增量（ΔCFG）**
-2. **第二階段（Stage B）**：擴展到注意力門控控制
-3. **第三階段（Stage C）**：加入步長因子動態調整
-
-### 🏗️ 架構概覽
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   CIFAR-10     │    │  Quantum Actor  │    │   Diffusion     │
-│   Environment  │◄──►│  (VQC + MLP)    │◄──►│   Sampler       │
-│                │    │                 │    │   (UNet+DDIM)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   PPO Trainer  │    │   MLP Critic    │    │   Generated     │
-│   (GAE + Clip) │    │   (Value Net)   │    │   Images        │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-## 🚀 快速開始
-
-### 環境設置
-
-```bash
-# 克隆專案
-git clone <your-repo-url>
-cd qrl_image_synthesis
-
-# 建立 conda 環境
-make env
-conda activate qrl_image_synthesis
-
-# 下載資料與預訓練模型
-make data
-```
-
-### 🎯 核心指令
-
-#### 1. 快速測試訓練（2個episodes）
-```bash
-python scripts/train_qrl.py --config-path ../qrl/configs --config-name main training.num_episodes=2 algo.ppo.rollout_steps=4
-```
-
-#### 2. 完整訓練（1000個episodes）
-```bash
-python scripts/train_qrl.py --config-path ../qrl/configs --config-name main training.num_episodes=1000
-```
-
-#### 3. 自定義參數訓練
 ```bash
 python scripts/train_qrl.py --config-path ../qrl/configs --config-name main \
-    training.num_episodes=500 \
-    algo.ppo.rollout_steps=32 \
-    algo.ppo.lr_actor=0.0003 \
-    algo.ppo.lr_critic=0.001 \
-    control.environment.max_steps=100 \
-    dataset.cifar10.target_class=5
+    training.num_episodes=2 algo.ppo.rollout_steps=4
 ```
 
-#### 4. 生成圖像（簡單方式）
-```bash
-# 使用最新訓練的模型生成圖像
-python generate_images.py --checkpoint runs/*/ckpt_best.pt --num-images 10 --target-class 3
+Full run (paper PPO setting, 1000 episodes):
 
-# 自定義參數生成
-python generate_images.py \
-    --checkpoint runs/20250915_132757/ckpt_best.pt \
-    --num-images 20 \
-    --target-class 5 \
-    --output-dir my_generated_images \
-    --device cuda
+```bash
+python scripts/train_qrl.py --config-path ../qrl/configs --config-name main
 ```
 
-#### 5. 生成圖像（完整方式）
+Key Hydra overrides (defaults from [qrl/configs/main.yaml](qrl/configs/main.yaml)):
+
+| Override | Meaning | Default |
+|---|---|---|
+| `training.num_episodes` | number of PPO episodes | 1000 |
+| `algo.ppo.rollout_steps` | steps per rollout | 512 |
+| `algo.ppo.num_envs` | parallel environments | 8 |
+| `algo.ppo.lr_actor` / `algo.ppo.lr_critic` | learning rates | 1e-4 / 1e-3 |
+| `algo.ppo.actor_type` | `quantum` or `classical` (parameter-aligned MLP) | `quantum` |
+| `control.environment.max_steps` | denoising steps per episode | 50 |
+| `control.delta_cfg.base_cfg` | `CFG_0` | 5.0 |
+| `dataset.cifar10.target_class` | class used for the reward classifier (0–9) | 3 (cat) |
+
+Checkpoints and logs are written to `runs/<timestamp>/` (`ckpt_best.pt`, `logs/`, `metrics/`).
+
+## Sampling
+
 ```bash
-# 使用 Hydra 配置
+# simple
+python generate_images.py --checkpoint runs/<timestamp>/ckpt_best.pt --num-images 16 --target-class 3
+
+# full Hydra pipeline
 python scripts/sample_qrl.py --config-path ../qrl/configs --config-name main \
-    sampling.num_samples=100 \
-    sampling.num_steps=50 \
-    sampling.batch_size=16
+    sampling.num_samples=100 sampling.num_steps=50 sampling.batch_size=16
 ```
 
-#### 6. 評估指標
+| Flag | Meaning | Default |
+|---|---|---|
+| `--checkpoint`, `-c` | path to `ckpt_best.pt` | required |
+| `--num-images`, `-n` | number of images | 10 |
+| `--target-class`, `-t` | CIFAR-10 class (0–9) | 3 (cat) |
+| `--output-dir`, `-o` | output directory | `generated_images` |
+| `--device`, `-d` | device | `cuda` |
+
+The policy is trained on a single target class but is class-agnostic at inference; pass any `--target-class` in 0–9 and the matching text prompt (`"a photo of a <class>"`) is generated automatically.
+
+## Evaluation
+
 ```bash
-# 計算 FID、IS、LPIPS、CLIPScore
 python scripts/eval_metrics.py \
-    --real ./data/cifar10/real \
-    --fake ./runs/20250915_132757/samples
+    --real-images ./data/cifar10/real \
+    --fake-images ./generated_images \
+    --target-class 3
 ```
 
-### 📊 訓練參數說明
+Reports PSNR, SSIM, LPIPS (paper metrics) plus FID / IS / CLIPScore.
 
-| 參數 | 說明 | 默認值 |
-|------|------|--------|
-| `training.num_episodes` | 訓練episodes數量 | 1000 |
-| `algo.ppo.rollout_steps` | 每次rollout的步數 | 32 |
-| `algo.ppo.lr_actor` | Actor學習率 | 0.0001 |
-| `algo.ppo.lr_critic` | Critic學習率 | 0.001 |
-| `control.environment.max_steps` | 環境最大步數 | 50 |
-| `dataset.cifar10.target_class` | 目標類別 (0-9) | 3 |
+## Reproducing the paper comparison
 
-### 🎨 生成參數說明
-
-| 參數 | 說明 | 默認值 |
-|------|------|--------|
-| `--checkpoint` | 檢查點文件路徑 | 必需 |
-| `--num-images` | 生成圖像數量 | 10 |
-| `--target-class` | 目標類別 (0-9) | 3 |
-| `--output-dir` | 輸出目錄 | generated_images |
-| `--device` | 設備 | cuda |
-
-### 📈 訓練監控
-
-訓練過程中會顯示詳細的epoch級別日誌：
-
-```
-=== Episode 1/1000 ===
-  收集經驗數據...
-  收集完成，數據大小: 32
-  開始策略更新...
-    Epoch 1/4 開始更新...
-    Epoch 1/4 完成 | Policy Loss: 1.165920 | Value Loss: 0.142671 | Entropy: -1.786369 | Clip Fraction: 1.0000
-    Epoch 2/4 開始更新...
-    Epoch 2/4 完成 | Policy Loss: -0.354277 | Value Loss: 0.503881 | Entropy: -1.790026 | Clip Fraction: 1.0000
-  策略更新完成
-  開始策略評估...
-  評估完成，獎勵: -3.6600
-  🎉 新的最佳模型！獎勵: -3.6600
-Episode 1/1000 完成 | Eval Reward: -3.6600 | Actor Loss: 0.4058 | Critic Loss: 0.3233 | 時間: 192.13s
-```
-
-### 🔧 故障排除
+Trains both actors (quantum 4q/depth 2 and classical MLP), generates 16 images for each of the 10 CIFAR-10 classes with each actor, and computes PSNR / SSIM / LPIPS against real CIFAR-10 images:
 
 ```bash
-# 檢查依賴是否安裝
-python test_imports.py
-
-# 檢查 CUDA 可用性
-python -c "import torch; print(torch.cuda.is_available())"
-
-# 檢查檢查點文件
-ls -la runs/*/ckpt_*.pt
+python scripts/experiments/run_improved_comparison_v2.py
 ```
 
-## 📁 專案結構
+Other comparison scripts (quick reward-only comparison, multi-metric comparison) live in [scripts/experiments/](scripts/experiments/); notes on them are in [results/analysis_reports/](results/analysis_reports/).
+
+## Results (CIFAR-10)
+
+Table I of the paper, 10 classes × 16 images per actor:
+
+| Actor | Params | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
+|---|---|---|---|---|
+| Classical RL (MLP) | 9,282 | 9.65 ± 1.61 | 0.044 ± 0.066 | 0.222 ± 0.072 |
+| **QRL (VQC + MLP, ours)** | **2,498** | **9.95 ± 1.72** | 0.044 ± 0.062 | **0.214 ± 0.065** |
+
+Per-class differences (quantum − classical):
+
+| Class | ΔPSNR | ΔSSIM | ΔLPIPS |
+|---|---|---|---|
+| airplane | −0.02 | −0.022 | −0.010 |
+| automobile | +0.04 | +0.016 | −0.016 |
+| bird | +0.02 | −0.011 | +0.030 |
+| cat | +0.58 | +0.025 | −0.041 |
+| deer | +0.31 | −0.020 | −0.003 |
+| dog | −0.01 | −0.032 | +0.013 |
+| frog | +1.21 | +0.014 | −0.015 |
+| horse | +0.13 | +0.023 | +0.014 |
+| ship | +0.14 | −0.016 | −0.020 |
+| truck | +0.60 | +0.024 | −0.032 |
+
+The QRL actor wins on PSNR in 8/10 classes and on LPIPS in 7/10. Raw per-image metrics, per-class CSVs, and the comparison figures are in [results/comparison_results/improved_comparison_results_v2/](results/comparison_results/improved_comparison_results_v2/) (`image_metrics_results.csv`, `category_comparison.csv`, `detailed_analysis_report.txt`, `*.pdf`).
+
+## Project structure
 
 ```
-qrl_image_synthesis/
-├─ README.md                 # 專案說明
-├─ LICENSE                   # MIT 授權
-├─ .gitignore               # Git 忽略檔案
-├─ Makefile                 # 建置指令
-├─ pyproject.toml           # Python 專案配置
-├─ environment.yml          # Conda 環境配置
-├─ Dockerfile               # Docker 容器配置
-├─ scripts/                 # 執行腳本
-│  ├─ download_cifar10.py  # 資料下載
-│  ├─ train_qrl.py         # 訓練腳本
-│  ├─ sample_qrl.py        # 採樣腳本
-│  └─ eval_metrics.py      # 指標評估
-├─ qrl/                     # 核心模組
-│  ├─ configs/              # 配置檔案
-│  ├─ utils/                # 工具函數
-│  ├─ envs/                 # 環境定義
-│  ├─ controls/             # 控制邏輯
-│  ├─ reward/               # 獎勵函數
-│  ├─ actors/               # 策略網路
-│  ├─ critics/              # 價值網路
-│  ├─ training/             # 訓練邏輯
-│  ├─ models/               # 模型定義
-│  └─ metrics/              # 評估指標
-├─ tests/                   # 測試檔案
-└─ assets/                  # 輸出資源
-   └─ samples/              # 生成圖像
+QRL_SD_img_gen/
+├─ qrl/
+│  ├─ configs/       # Hydra configs: main.yaml (entry), base.yaml, algo/, control/, dataset/, model/
+│  ├─ envs/          # DiffusionEnvironment: SD v1.5 + DDIM wrapped as a Gymnasium env
+│  ├─ controls/      # action spaces and how actions modify sampling (control_spaces.py, apply_controls.py)
+│  ├─ actors/        # QuantumActor (VQC + MLP), ClassicalActor, AlignedClassicalActor
+│  ├─ critics/       # MLPCritic
+│  ├─ reward/        # ClassifierReward, DiversityReward
+│  ├─ training/      # PPOTrainer, QuantumPPOTrainer, GAE buffers
+│  ├─ models/        # lightweight UNet
+│  ├─ metrics/       # FID / IS / LPIPS / CLIPScore, efficiency and quantum-specific metrics
+│  ├─ evaluation/    # PSNR / SSIM / LPIPS image-quality evaluation
+│  └─ utils/         # logging, seeding
+├─ configs/          # standalone configs for the quantum / classical / aligned-classical comparison
+├─ scripts/
+│  ├─ train_qrl.py · sample_qrl.py · eval_metrics.py · download_cifar10.py
+│  ├─ experiments/   # quantum-vs-classical comparison runs (run_improved_comparison_v2.py = paper)
+│  └─ utilities/     # dependency check, image conversion helpers
+├─ results/
+│  ├─ comparison_results/   # paper numbers: CSV / JSON / PDF figures
+│  └─ analysis_reports/     # experiment notes and analysis write-ups
+├─ assets/           # README figures
+├─ tests/            # pytest: actor shapes, env smoke test, PPO step
+├─ generate_images.py
+├─ quick_start.py
+├─ Makefile · environment.yml · Dockerfile · pyproject.toml
+└─ PROJECT_ORGANIZATION.md
 ```
 
-## ⚙️ 配置說明
+## Roadmap
 
-### 訓練配置
+The paper covers **Stage A** (ΔCFG control). Two further control spaces are wired into the environment ([qrl/envs/diffusion_env.py](qrl/envs/diffusion_env.py)) but not evaluated in the paper:
 
-- **PPO 參數**：`gamma=0.995`, `gae_lambda=0.95`, `clip_ratio=0.1`
-- **量子 Actor**：8 qubits, 4 layers, RY-RZ + ring entanglement
-- **採樣器**：DDIM, 50 steps, base CFG=5.0
-- **控制空間**：ΔCFG ∈ [-2.0, +2.0]
+| Stage | Action space | Status |
+|---|---|---|
+| A | ΔCFG ∈ [−2, 2] | paper, default |
+| B | ΔCFG + attention gate ∈ [0, 1] | action space defined; select with `control.stage=B` |
+| C | ΔCFG + attention gate + step-size scale ∈ [0.5, 2] | action space defined; select with `control.stage=C` |
 
-### 環境配置
+To add a new control parameter, define its action space in `qrl/controls/control_spaces.py`, implement its effect in `qrl/controls/apply_controls.py`, and extend the env state accordingly.
 
-- **狀態空間**：12-16 維向量（步數、潛在變數、預測噪聲、代理置信度等）
-- **動作空間**：連續標量（ΔCFG）
-- **獎勵設計**：分類器置信度增量 + 動作正則化
-
-## 🔬 技術細節
-
-### 量子策略網路
-
-- **架構**：Variational Quantum Circuit (VQC) + MLP 頭
-- **量子比特**：8 qubits
-- **層數**：4 layers
-- **參數化**：RY-RZ 旋轉門 + ring entanglement
-- **輸出**：高斯策略的均值 μ 和對數標準差 logσ
-
-### 經典對比
-
-- **參數對齊**：經典 MLP Actor 的參數量與量子 Actor + MLP 頭匹配
-- **公平比較**：確保量子優勢來自於量子特性而非參數數量
-
-### 獎勵函數
-
-- **終端獎勵**：`α * log p(y|x)` （分類器置信度）
-- **步間獎勵**：`β * (conf_t - conf_{t-1})` （置信度增量）
-- **正則化**：L2 動作懲罰 + 可選 TV 正則
-
-## 📊 預期結果
-
-### 訓練曲線
-
-- **PPO 回報**：隨訓練穩定上升
-- **分類器置信度**：採樣過程中逐步增長
-- **動作正則化**：ΔCFG 變化趨於平滑
-
-### 生成品質
-
-- **FID 分數**：優於固定 CFG 基準
-- **多樣性**：LPIPS 分數保持合理範圍
-- **語義一致性**：CLIPScore 反映目標類別匹配度
-
-## 🚧 後續擴展
-
-### Stage B：注意力門控控制
-
-```yaml
-# 在 configs/control/stageB_attn.yaml 中啟用
-enable_attn_gating: true
-enable_step_scale: false
-attn_gate_min: 0.0
-attn_gate_max: 1.0
-```
-
-### Stage C：步長因子控制
-
-```yaml
-# 在 configs/control/stageC_full.yaml 中啟用
-enable_attn_gating: true
-enable_step_scale: true
-step_scale_min: 0.5
-step_scale_max: 2.0
-```
-
-## 🧪 測試
+## Tests
 
 ```bash
-# 運行所有測試
-make test
-
-# 或指定測試
-pytest tests/ -v
+make test          # or: pytest tests/ -v
 ```
 
-## 📝 開發指南
+## Citation
 
-### 添加新的控制參數
+```bibtex
+@inproceedings{chen2026qrldiffusion,
+  title     = {Quantum Reinforcement Learning-Guided Diffusion Model for Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures},
+  author    = {Chen, Chi-Sheng and Kuo, En-Jui},
+  booktitle = {IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  year      = {2026},
+  note      = {arXiv:2509.14163}
+}
+```
 
-1. 在 `qrl/controls/control_spaces.py` 中定義新的動作空間
-2. 在 `qrl/controls/apply_controls.py` 中實現控制邏輯
-3. 更新配置檔案和環境狀態空間
+## License
 
-### 擴展到其他資料集
+MIT — see [LICENSE](LICENSE).
 
-1. 在 `qrl/configs/dataset/` 中添加新配置
-2. 實現對應的資料載入器
-3. 調整獎勵函數和評估指標
+## Acknowledgements
 
-## 🤝 貢獻
-
-歡迎提交 Issue 和 Pull Request！
-
-## 📄 授權
-
-本專案採用 MIT 授權條款，詳見 [LICENSE](LICENSE) 檔案。
-
-## 🙏 致謝
-
-- [Diffusers](https://github.com/huggingface/diffusers) - 擴散模型實現
-- [PennyLane](https://pennylane.ai/) - 量子機器學習框架
-- [Gymnasium](https://gymnasium.farama.org/) - 強化學習環境
-- [PyTorch](https://pytorch.org/) - 深度學習框架
+Built on [Diffusers](https://github.com/huggingface/diffusers), [PennyLane](https://pennylane.ai/), [Gymnasium](https://gymnasium.farama.org/), and [PyTorch](https://pytorch.org/).

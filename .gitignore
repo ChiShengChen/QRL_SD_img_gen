@@ -13149,3 +13149,6 @@ assets/samples/
 *.3g2
 *.f4v
 *.
+
+# README figures (override the *.png rule above)
+!assets/teaser.png
