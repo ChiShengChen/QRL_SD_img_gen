@@ -244,13 +244,16 @@ make test          # or: pytest tests/ -v
 ## Citation
 
 ```bibtex
-@inproceedings{chen2026qrldiffusion,
-  title     = {Quantum Reinforcement Learning-Guided Diffusion Model for Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures},
-  author    = {Chen, Chi-Sheng and Kuo, En-Jui},
-  booktitle = {IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
-  year      = {2026},
-  note      = {arXiv:2509.14163}
-}
+@INPROCEEDINGS{11461991,
+  author={Chen, Chi-Sheng and Kuo, En-Jui},
+  booktitle={ICASSP 2026 - 2026 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)}, 
+  title={Quantum Reinforcement Learning-Guided Diffusion Model for Image Synthesis via Hybrid Quantum-Classical Generative Model Architectures}, 
+  year={2026},
+  volume={},
+  number={},
+  pages={22422-22426},
+  keywords={Feeds;Antennas;Circuits;Quantum circuit;Circuits and systems;Feedback;Quantum circuit;Quantum communication;TV;Protocols;Quantum machine learning;diffusion models;classifier-free guidance;reinforcement learning;variational quantum circuits;PPO},
+  doi={10.1109/ICASSP55912.2026.11461991}}
 ```
 
 ## License
